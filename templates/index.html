@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>arXiv相似度匹配系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            line-height: 1.6;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+        
+        /* 主容器布局 */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* 侧边栏样式 */
+        .sidebar {
+            width: 0;
+            height: 100vh;
+            background: white;
+            box-shadow: 2px 0 15px rgba(0, 0, 0, 0.15);
+            position: fixed;
+            left: 0;
+            top: 0;
+            overflow-x: hidden;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            border-top-right-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+        
+        .sidebar.open {
+            width: 340px;
+        }
+        
+        /* 侧边栏头部 */
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fafafa;
+            border-top-right-radius: 20px;
+        }
+        
+        .sidebar-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .close-sidebar-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #666;
+            padding: 5px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .close-sidebar-btn:hover {
+            background: #e9ecef;
+            color: #333;
+        }
+        
+        /* 侧边栏内容 */
+        .sidebar-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: white;
+        }
+        
+        /* 主内容区域 */
+        .main-content {
+            flex: 1;
+            margin-left: 0;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar.open + .main-content {
+            margin-left: 340px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 页面头部 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px 0;
+        }
+        
+        .header-title {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        h1 {
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.9rem;
+            font-weight: 400;
+            margin: 0;
+        }
+        
+        /* 展开侧边栏按钮 */
+        .open-sidebar-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .open-sidebar-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* 聊天容器 */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            min-height: 0;
+        }
+        
+        /* 消息区域 */
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #fafbff;
+        }
+        
+        /* 消息样式 */
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .user-message {
+            align-items: flex-end;
+        }
+        
+        .bot-message {
+            align-items: flex-start;
+        }
+        
+        .message-content {
+            max-width: 85%;
+            padding: 14px 18px;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            position: relative;
+            word-wrap: break-word;
+        }
+        
+        .user-message .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 6px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+        }
+        
+        .bot-message .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .message-header {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        
+        /* 输入区域 */
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .input-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        /* 文本输入框 */
+        textarea {
+            flex: 1;
+            padding: 14px 18px;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            background: #fafbff;
+            outline: none;
+        }
+        
+        textarea:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+        
+        /* 使用示例文本 */
+        .use-sample {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: #6b7280;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+        
+        .use-sample:hover {
+            color: #667eea;
+        }
+        
+        /* 发送按钮 */
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            outline: none;
+        }
+        
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background: #e5e7eb;
+            color: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* 加载状态 */
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #9ca3af;
+            font-size: 0.85rem;
+        }
+        
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 结果区域 */
+        .results {
+            margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        
+        /* 结果项 */
+        .result-item {
+            margin-bottom: 20px;
+            padding: 16px;
+            border-radius: 12px;
+            background: #fafbff;
+            border: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+        
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+            border-color: #667eea;
+        }
+        
+        .result-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        /* 相似度分数 */
+        .similarity-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+        
+        /* 结果标题 */
+        .result-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+        
+        /* 结果元数据 */
+        .result-meta {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        
+        .result-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* 摘要样式 */
+        .result-summary, .result-chinese-summary {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+        
+        .result-summary {
+            background: white;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .result-chinese-summary {
+            background: #fff8e1;
+            border-left: 4px solid #ffc107;
+        }
+        
+        /* 论文链接 */
+        .result-title a {
+            color: #667eea;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        
+        .result-title a:hover {
+            color: #5568d3;
+            text-decoration: underline;
+        }
+        
+        /* 分类选择组件 */
+        .category-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .category-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 16px;
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
+            background: white;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .category-item:hover {
+            background: #f0f7ff;
+            border-color: #667eea;
+            transform: translateY(-1px);
+        }
+        
+        .category-item input[type="checkbox"] {
+            cursor: pointer;
+            accent-color: #667eea;
+            width: 16px;
+            height: 16px;
+        }
+        
+        /* 已选分类 */
+        #selected-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        
+        .category-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 16px;
+            font-size: 0.85rem;
+            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+            transition: all 0.2s ease;
+        }
+        
+        .category-tag:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* 删除分类按钮 */
+        .remove-category {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+        
+        .remove-category:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+        
+        /* 配置区域 */
+        .config-section {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+            transition: all 0.3s ease;
+        }
+        
+        .config-section:hover {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* 配置区域标题 */
+        .config-section-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        /* 表单组 */
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+        
+        /* 表单标签 */
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        /* 表单提示 */
+        .form-hint {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-top: 4px;
+            line-height: 1.3;
+        }
+        
+        /* 模型选择器 */
+        .model-selector {
+            position: relative;
+            margin-top: 8px;
+        }
+        
+        .model-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .model-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* 模型建议 */
+        .model-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 4px;
+        }
+        
+        .suggestion-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+        
+        .suggestion-item:hover {
+            background: #f0f7ff;
+            color: #667eea;
+        }
+        
+        .suggestion-item.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        /* 滑块样式 */
+        input[type="range"] {
+            flex: 1;
+            margin: 0 8px;
+        }
+        
+        /* 时间范围特殊处理 - 垂直布局 */
+        .config-section .form-group:has(input[type="date"]) .input-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .config-section .form-group:has(input[type="date"]) input[type="date"] {
+            width: 100%;
+            flex: 0;
+        }
+        
+        input[type="date"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* 日期选择器和下拉框 */
+        input[type="date"], select {
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            background: white;
+            cursor: pointer;
+        }
+        input[type="password"], input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        input[type="password"]:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* 显示/隐藏密码按钮 */
+        .toggle-password-btn {
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            background: #6b7280;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        
+        .toggle-password-btn:hover {
+            background: #4b5563;
+        }
+        
+        /* 加载动画 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .result-item {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        /* 无选择提示 */
+        .no-selection {
+            color: #9ca3af;
+            font-style: italic;
+            font-size: 0.85rem;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 1024px) {
+            .sidebar.open {
+                width: 320px;
+            }
+            
+            .sidebar.open + .main-content {
+                margin-left: 320px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar.open {
+                width: 100%;
+                border-radius: 0;
+            }
+            
+            .sidebar.open + .main-content {
+                margin-left: 100%;
+            }
+            
+            .main-content {
+                padding: 12px;
+            }
+            
+            .container {
+                padding: 0;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .subtitle {
+                font-size: 0.85rem;
+            }
+            
+            .input-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .message-content {
+                max-width: 90%;
+                font-size: 0.9rem;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+            
+            .open-sidebar-btn {
+                align-self: flex-start;
+            }
+        }
+        
+        /* 平滑滚动 */
+        * {
+            scroll-behavior: smooth;
+        }
+        
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+        
+        /* 选择文本样式 */
+        ::selection {
+            background: rgba(102, 126, 234, 0.2);
+        }
+        
+        /* 回到顶部和回到对话框按钮 */
+        .scroll-buttons {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 998;
+        }
+        
+        .scroll-btn {
+            width: 45px;
+            height: 45px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+            opacity: 0;
+            visibility: hidden;
+        }
+        
+        .scroll-btn.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .scroll-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+        }
+        
+        /* 设置区域优化 */
+        .sidebar-content {
+            padding-right: 10px;
+        }
+        
+        .config-section {
+            overflow: hidden;
+        }
+        
+        /* 数量控制输入框 */
+        .number-input {
+            width: 80px;
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        
+        .number-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- 应用容器 -->
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3 class="sidebar-title">设置选项</h3>
+                <button class="close-sidebar-btn" id="closeSidebarBtn">&times;</button>
+            </div>
+            
+            <div class="sidebar-content">
+                <!-- 查询数量控制 -->
+                <div class="config-section">
+                    <h4 class="config-section-title">查询设置</h4>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="max-query-count">
+                            最大查询文章数量: 
+                        </label>
+                        <input 
+                            type="number" 
+                            id="max-query-count" 
+                            class="number-input" 
+                            min="1" 
+                            max="100" 
+                            value="20"
+                            placeholder="20"
+                        >
+                        <p class="form-hint">控制从arXiv查询的最大论文数量</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="max-results-count">
+                            返回匹配结果数量: 
+                        </label>
+                        <input 
+                            type="number" 
+                            id="max-results-count" 
+                            class="number-input" 
+                            min="1" 
+                            max="50" 
+                            value="10"
+                            placeholder="10"
+                        >
+                        <p class="form-hint">最终返回的相似度匹配结果数量</p>
+                    </div>
+                </div>
+                
+                <!-- 时间范围设置 -->
+                <div class="config-section">
+                    <h4 class="config-section-title">时间范围</h4>
+                    <div class="form-group">
+                        <div class="input-row">
+                            <input type="date" id="start-date" name="start-date" placeholder="开始日期">
+                            <input type="date" id="end-date" name="end-date" placeholder="结束日期">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 分类选择 -->
+                <div class="config-section">
+                    <h4 class="config-section-title">论文分类</h4>
+                    <div class="form-group">
+                        <label class="form-label">选择分类</label>
+                        <div id="category-selector">
+                            <!-- 分类选择组件将动态生成 -->
+                        </div>
+                        <div id="selected-categories" style="margin-top: 15px;">
+                            <!-- 已选分类将显示在这里 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 大模型配置 -->
+                <div class="config-section">
+                    <h4 class="config-section-title">大模型配置</h4>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="provider-select">服务提供商</label>
+                        <select id="provider-select">
+                            <option value="siliconflow">SiliconFlow</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="google">Google</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="api-key-input">API密钥</label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="password" id="api-key-input" placeholder="输入API密钥" class="model-input">
+                            <button type="button" id="toggle-key-visibility" class="toggle-password-btn">显示/隐藏</button>
+                        </div>
+                        <p class="form-hint">请确保API密钥的安全性，避免泄露</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="model-input">模型名称</label>
+                        <div class="model-selector">
+                            <input 
+                                type="text" 
+                                id="model-input" 
+                                class="model-input" 
+                                placeholder="选择或输入模型名称"
+                            >
+                            <div class="model-suggestions" id="model-suggestions" style="display: none;"></div>
+                        </div>
+                        <p class="form-hint">支持下拉选择或手动输入自定义模型名称</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="temperature-slider">
+                            Temperature: <span id="temperature-value">0.3</span>
+                        </label>
+                        <input type="range" id="temperature-slider" min="0" max="1" step="0.1" value="0.3">
+                        <p class="form-hint">控制输出的随机性，值越高越随机</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="top-p-slider">
+                            Top-P: <span id="top-p-value">0.8</span>
+                        </label>
+                        <input type="range" id="top-p-slider" min="0" max="1" step="0.1" value="0.8">
+                        <p class="form-hint">控制核采样范围，值越小越聚焦</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- 滚动控制按钮 -->
+        <div class="scroll-buttons">
+            <button class="scroll-btn" id="scrollToTop" title="回到顶部">
+                ↑
+            </button>
+            <button class="scroll-btn" id="scrollToInput" title="回到输入框">
+                ↓
+            </button>
+        </div>
+        
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <div class="container">
+                <header>
+                    <div class="header-title">
+                        <h1>arXiv相似度匹配系统</h1>
+                        <p class="subtitle">输入文本，系统将为您匹配最相似的arXiv论文</p>
+                    </div>
+                    <button class="open-sidebar-btn" id="openSidebarBtn">
+                        ⚙️ 设置
+                    </button>
+                </header>
+                
+                <div class="chat-container">
+                    <div class="messages" id="messages">
+                        <!-- 消息将动态添加到这里 -->
+                    </div>
+                    
+                    <div class="input-area">
+                        <form id="input-form" class="input-form">
+                            <div class="input-row">
+                                <textarea id="input-text" placeholder="请输入要查询相似度文章的标题与摘要"></textarea>
+                            </div>
+                            
+                            <div class="input-row">
+                                <label class="use-sample">
+                                    <input type="checkbox" id="use-sample"> 使用示例文本
+                                </label>
+                                <button type="submit" id="send-btn">发送</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('input-form');
+            const messages = document.getElementById('messages');
+            const inputText = document.getElementById('input-text');
+            const useSample = document.getElementById('use-sample');
+            const sendBtn = document.getElementById('send-btn');
+            const sidebar = document.getElementById('sidebar');
+            const openSidebarBtn = document.getElementById('openSidebarBtn');
+            const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+            const scrollToTopBtn = document.getElementById('scrollToTop');
+            const scrollToInputBtn = document.getElementById('scrollToInput');
+            const maxQueryCount = document.getElementById('max-query-count');
+            const maxResultsCount = document.getElementById('max-results-count');
+            const apiKeyInput = document.getElementById('api-key-input');
+            
+            // 示例文本内容
+            const sampleText = "Multi-Modal Change Detection, Application to the Detection of Flooded Areas: Outcome of the 2009–2010 Data Fusion Contest。 The 2009-2010 Data Fusion Contest organized by the Data Fusion Technical Committee of the IEEE Geoscience and Remote Sensing Society was focused on the detection of flooded areas using multi-temporal and multi-modal images. Both high spatial resolution optical and synthetic aperture radar data were provided. The goal was not only to identify the best algorithms (in terms of accuracy), but also to investigate the further improvement derived from decision fusion. This paper presents the four awarded algorithms and the conclusions of the contest, investigating both supervised and unsupervised methods and the use of multi-modal data for flood detection. Interestingly, a simple unsupervised change detection method provided similar accuracy as supervised approaches, and a digital elevation model-based predictive method yielded a comparable projected change detection map without using post-event data.";
+            
+            // 预设模型列表
+            const modelSuggestions = [
+                'Qwen/Qwen2.5-7B-Instruct',
+                'Qwen/QwQ-32B',
+                'gpt-4o',
+                'gpt-4-turbo',
+                'claude-3-opus-20240229',
+                'claude-3-sonnet-20240229',
+                'gemini-pro',
+                'gemini-1.5-pro',
+                'mistralai/Mixtral-8x7B-Instruct-v0.1',
+                'llama3-70b',
+                'llama3-8b'
+            ];
+            
+            // 侧边栏控制功能
+            function initSidebar() {
+                // 打开侧边栏
+                openSidebarBtn.addEventListener('click', function(e) {
+                    e.stopPropagation(); // 阻止事件冒泡
+                    sidebar.classList.add('open');
+                });
+                
+                // 关闭侧边栏
+                closeSidebarBtn.addEventListener('click', function() {
+                    sidebar.classList.remove('open');
+                });
+                
+                // 点击侧边栏外部关闭
+                document.addEventListener('click', function(e) {
+                    // 检查点击是否在侧边栏或打开按钮内部
+                    if (!sidebar.contains(e.target) && !openSidebarBtn.contains(e.target)) {
+                        sidebar.classList.remove('open');
+                    }
+                });
+            }
+            
+            // 滚动按钮功能
+            function initScrollButtons() {
+                // 回到顶部
+                scrollToTopBtn.addEventListener('click', function() {
+                    window.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
+                });
+                
+                // 回到输入框
+                scrollToInputBtn.addEventListener('click', function() {
+                    inputText.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                    inputText.focus();
+                });
+                
+                // 监听滚动事件，控制按钮显示/隐藏
+                window.addEventListener('scroll', function() {
+                    if (window.scrollY > 300) {
+                        scrollToTopBtn.classList.add('visible');
+                        scrollToInputBtn.classList.add('visible');
+                    } else {
+                        scrollToTopBtn.classList.remove('visible');
+                        scrollToInputBtn.classList.remove('visible');
+                    }
+                });
+            }
+            
+            // API密钥自动填充功能
+            function initApiKeyAutoFill() {
+                // 尝试从环境变量获取API密钥（在实际应用中，这应该通过后端传递）
+                // 这里使用localStorage作为替代方案，模拟从.env获取
+                const savedApiKey = localStorage.getItem('savedApiKey');
+                if (savedApiKey) {
+                    apiKeyInput.value = savedApiKey;
+                }
+                
+                // 添加API密钥保存功能
+                apiKeyInput.addEventListener('input', function() {
+                    localStorage.setItem('savedApiKey', this.value);
+                });
+            }
+            
+            // 查询数量设置管理
+            function initQuerySettings() {
+                // 从本地存储加载设置
+                const savedSettings = JSON.parse(localStorage.getItem('querySettings')) || {};
+                
+                // 初始化表单值
+                document.getElementById('max-query-count').value = savedSettings.maxQueryCount || 20;
+                document.getElementById('max-results-count').value = savedSettings.maxResultsCount || 10;
+                
+                // 添加保存事件监听
+                document.getElementById('max-query-count').addEventListener('input', saveQuerySettings);
+                document.getElementById('max-results-count').addEventListener('input', saveQuerySettings);
+            }
+            
+            // 保存查询设置
+            function saveQuerySettings() {
+                const settings = {
+                    maxQueryCount: parseInt(document.getElementById('max-query-count').value),
+                    maxResultsCount: parseInt(document.getElementById('max-results-count').value)
+                };
+                localStorage.setItem('querySettings', JSON.stringify(settings));
+            }
+            
+            // 模型选择自动完成功能
+            function initModelAutocomplete() {
+                const modelInput = document.getElementById('model-input');
+                const modelSuggestionsContainer = document.getElementById('model-suggestions');
+                let currentSuggestionIndex = -1;
+                
+                // 渲染建议列表
+                function renderSuggestions(query) {
+                    const filteredModels = modelSuggestions.filter(model => 
+                        model.toLowerCase().includes(query.toLowerCase())
+                    );
+                    
+                    if (filteredModels.length === 0) {
+                        modelSuggestionsContainer.style.display = 'none';
+                        return;
+                    }
+                    
+                    modelSuggestionsContainer.innerHTML = '';
+                    filteredModels.forEach((model, index) => {
+                        const suggestionItem = document.createElement('div');
+                        suggestionItem.className = 'suggestion-item';
+                        suggestionItem.textContent = model;
+                        suggestionItem.dataset.index = index;
+                        
+                        // 点击选择建议
+                        suggestionItem.addEventListener('click', function() {
+                            modelInput.value = model;
+                            modelSuggestionsContainer.style.display = 'none';
+                            saveConfig();
+                        });
+                        
+                        modelSuggestionsContainer.appendChild(suggestionItem);
+                    });
+                    
+                    modelSuggestionsContainer.style.display = 'block';
+                    currentSuggestionIndex = -1;
+                }
+                
+                // 处理键盘导航
+                function handleKeyboardNavigation(e) {
+                    const suggestions = modelSuggestionsContainer.querySelectorAll('.suggestion-item');
+                    
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (currentSuggestionIndex < suggestions.length - 1) {
+                            currentSuggestionIndex++;
+                            updateActiveSuggestion(suggestions);
+                        }
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (currentSuggestionIndex > 0) {
+                            currentSuggestionIndex--;
+                            updateActiveSuggestion(suggestions);
+                        }
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (currentSuggestionIndex >= 0 && suggestions[currentSuggestionIndex]) {
+                            modelInput.value = suggestions[currentSuggestionIndex].textContent;
+                            modelSuggestionsContainer.style.display = 'none';
+                            saveConfig();
+                        }
+                    } else if (e.key === 'Escape') {
+                        modelSuggestionsContainer.style.display = 'none';
+                    }
+                }
+                
+                // 更新激活的建议项
+                function updateActiveSuggestion(suggestions) {
+                    suggestions.forEach((suggestion, index) => {
+                        if (index === currentSuggestionIndex) {
+                            suggestion.classList.add('selected');
+                            suggestion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        } else {
+                            suggestion.classList.remove('selected');
+                        }
+                    });
+                }
+                
+                // 输入事件监听
+                modelInput.addEventListener('input', function() {
+                    renderSuggestions(this.value);
+                    saveConfig();
+                });
+                
+                // 键盘事件监听
+                modelInput.addEventListener('keydown', handleKeyboardNavigation);
+                
+                // 点击外部关闭建议列表
+                document.addEventListener('click', function(e) {
+                    if (!modelSuggestionsContainer.contains(e.target) && e.target !== modelInput) {
+                        modelSuggestionsContainer.style.display = 'none';
+                    }
+                });
+            }
+            
+            // 监听示例文本复选框变化
+            useSample.addEventListener('change', function() {
+                if (this.checked) {
+                    inputText.value = sampleText;
+                    inputText.disabled = true;
+                } else {
+                    inputText.value = '';
+                    inputText.disabled = false;
+                }
+            });
+            
+            // 分类选择功能
+            function initCategorySelector() {
+                // 示例分类数据（实际应用中应从服务器获取）
+                const categories = [
+                    { id: 'cs.CV', name: 'Computer Vision and Pattern Recognition' },
+                    { id: 'cs.AI', name: 'Artificial Intelligence' },
+                    { id: 'cs.LG', name: 'Machine Learning' },
+                    { id: 'physics.quant-ph', name: 'Quantum Physics' },
+                    { id: 'eess.IV', name: 'Image and Video Processing' },
+                    { id: 'cs.CL', name: 'Computation and Language' },
+                    { id: 'cs.NE', name: 'Neural and Evolutionary Computing' }
+                ];
+                
+                // 从本地存储加载已选分类
+                let selectedCategories = JSON.parse(localStorage.getItem('selectedCategories')) || [];
+                
+                // 渲染分类选择器
+                const categorySelector = document.getElementById('category-selector');
+                const categoryList = document.createElement('div');
+                categoryList.className = 'category-list';
+                
+                categories.forEach(category => {
+                    const categoryItem = document.createElement('label');
+                    categoryItem.className = 'category-item';
+                    categoryItem.innerHTML = `
+                        <input type="checkbox" value="${category.id}" ${selectedCategories.includes(category.id) ? 'checked' : ''}>
+                        <span>${category.id}: ${category.name}</span>
+                    `;
+                    categoryList.appendChild(categoryItem);
+                });
+                
+                categorySelector.appendChild(categoryList);
+                
+                // 更新已选分类显示
+                updateSelectedCategoriesDisplay(selectedCategories, categories);
+                
+                // 添加分类选择事件监听
+                categoryList.addEventListener('change', function(e) {
+                    if (e.target.type === 'checkbox') {
+                        const categoryId = e.target.value;
+                        if (e.target.checked) {
+                            selectedCategories.push(categoryId);
+                        } else {
+                            selectedCategories = selectedCategories.filter(id => id !== categoryId);
+                        }
+                        
+                        // 保存到本地存储
+                        localStorage.setItem('selectedCategories', JSON.stringify(selectedCategories));
+                        
+                        // 更新显示
+                        updateSelectedCategoriesDisplay(selectedCategories, categories);
+                    }
+                });
+            }
+            
+            // 更新已选分类显示
+            function updateSelectedCategoriesDisplay(selectedIds, allCategories) {
+                const selectedContainer = document.getElementById('selected-categories');
+                selectedContainer.innerHTML = '';
+                
+                if (selectedIds.length === 0) {
+                    selectedContainer.innerHTML = '<span class="no-selection">未选择任何分类</span>';
+                    return;
+                }
+                
+                selectedIds.forEach(categoryId => {
+                    const category = allCategories.find(cat => cat.id === categoryId);
+                    if (category) {
+                        const categoryTag = document.createElement('span');
+                        categoryTag.className = 'category-tag';
+                        categoryTag.innerHTML = `
+                            ${category.id}
+                            <button class="remove-category" data-category-id="${categoryId}">×</button>
+                        `;
+                        selectedContainer.appendChild(categoryTag);
+                    }
+                });
+                
+                // 添加删除分类事件监听
+                document.querySelectorAll('.remove-category').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const categoryId = this.getAttribute('data-category-id');
+                        let selectedCategories = JSON.parse(localStorage.getItem('selectedCategories')) || [];
+                        selectedCategories = selectedCategories.filter(id => id !== categoryId);
+                        localStorage.setItem('selectedCategories', JSON.stringify(selectedCategories));
+                        initCategorySelector(); // 重新初始化以更新UI
+                    });
+                });
+            }
+            
+            // 获取已选分类
+            function getSelectedCategories() {
+                return JSON.parse(localStorage.getItem('selectedCategories')) || [];
+            }
+            
+            // 大模型配置功能
+            function initModelConfig() {
+                // 从本地存储加载配置
+                const savedConfig = JSON.parse(localStorage.getItem('modelConfig')) || {};
+                
+                // 初始化表单值
+                document.getElementById('provider-select').value = savedConfig.provider || 'siliconflow';
+                document.getElementById('api-key-input').value = savedConfig.apiKey || '';
+                document.getElementById('model-input').value = savedConfig.model || 'Qwen/Qwen2.5-7B-Instruct';
+                document.getElementById('temperature-slider').value = savedConfig.temperature || 0.3;
+                document.getElementById('temperature-value').textContent = savedConfig.temperature || 0.3;
+                document.getElementById('top-p-slider').value = savedConfig.topP || 0.8;
+                document.getElementById('top-p-value').textContent = savedConfig.topP || 0.8;
+                
+                // API密钥显示/隐藏
+                document.getElementById('toggle-key-visibility').addEventListener('click', function() {
+                    const apiKeyInput = document.getElementById('api-key-input');
+                    const currentType = apiKeyInput.type;
+                    apiKeyInput.type = currentType === 'password' ? 'text' : 'password';
+                });
+                
+                // 温度参数实时更新
+                document.getElementById('temperature-slider').addEventListener('input', function() {
+                    const value = this.value;
+                    document.getElementById('temperature-value').textContent = value;
+                    saveConfig();
+                });
+                
+                // Top-P参数实时更新
+                document.getElementById('top-p-slider').addEventListener('input', function() {
+                    const value = this.value;
+                    document.getElementById('top-p-value').textContent = value;
+                    saveConfig();
+                });
+                
+                // 其他配置项变化时保存
+                document.getElementById('provider-select').addEventListener('change', saveConfig);
+                document.getElementById('model-input').addEventListener('input', saveConfig);
+                document.getElementById('api-key-input').addEventListener('input', saveConfig);
+            }
+            
+            // 保存配置到本地存储
+            function saveConfig() {
+                const config = {
+                    provider: document.getElementById('provider-select').value,
+                    apiKey: document.getElementById('api-key-input').value,
+                    model: document.getElementById('model-input').value,
+                    temperature: parseFloat(document.getElementById('temperature-slider').value),
+                    topP: parseFloat(document.getElementById('top-p-slider').value)
+                };
+                localStorage.setItem('modelConfig', JSON.stringify(config));
+            }
+            
+            // 获取当前配置
+            function getCurrentConfig() {
+                return JSON.parse(localStorage.getItem('modelConfig')) || {};
+            }
+            
+            // 发送消息
+            function sendMessage() {
+                const text = useSample.checked ? sampleText : inputText.value.trim();
+                
+                if (!text) {
+                    alert('请输入文本或选择使用示例文本');
+                    return;
+                }
+                
+                // 获取时间范围
+                const startDate = document.getElementById('start-date').value;
+                const endDate = document.getElementById('end-date').value;
+                
+                // 获取已选分类
+                const selectedCategories = getSelectedCategories();
+                
+                // 获取查询数量设置
+                const maxQueryCount = parseInt(document.getElementById('max-query-count').value) || 20;
+                const maxResultsCount = parseInt(document.getElementById('max-results-count').value) || 10;
+                
+                // 添加用户消息
+                addMessage(text, 'user');
+                
+                // 清空输入
+                inputText.value = '';
+                useSample.checked = false;
+                inputText.disabled = false;
+                // 不清空日期选择，方便用户连续查询
+                
+                // 禁用发送按钮，显示加载状态
+                sendBtn.disabled = true;
+                sendBtn.innerHTML = '<div class="loading"><div class="spinner"></div>处理中...</div>';
+                
+                // 发送请求
+                fetch('/api/match', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        use_sample: useSample.checked,
+                        start_date: startDate,
+                        end_date: endDate,
+                        categories: selectedCategories,
+                        max_query_count: maxQueryCount,
+                        max_results_count: maxResultsCount
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 添加机器人响应
+                        addMessage('已找到相关论文，相似度匹配结果如下：', 'bot');
+                        
+                        // 添加结果
+                        addResults(data.results);
+                    } else {
+                        addMessage(`错误: ${data.error}`, 'bot');
+                    }
+                })
+                .catch(error => {
+                    addMessage(`请求失败: ${error.message}`, 'bot');
+                })
+                .finally(() => {
+                    // 恢复发送按钮
+                    sendBtn.disabled = false;
+                    sendBtn.innerHTML = '发送';
+                    
+                    // 滚动到底部
+                    messages.scrollTop = messages.scrollHeight;
+                });
+            }
+            
+            // 添加消息
+            function addMessage(text, type) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}-message`;
+                
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'message-header';
+                headerDiv.textContent = type === 'user' ? '您' : '系统';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.textContent = text;
+                
+                messageDiv.appendChild(headerDiv);
+                messageDiv.appendChild(contentDiv);
+                messages.appendChild(messageDiv);
+                
+                // 滚动到底部
+                messages.scrollTop = messages.scrollHeight;
+            }
+            
+            // 添加结果
+            function addResults(results) {
+                const resultsDiv = document.createElement('div');
+                resultsDiv.className = 'results';
+                
+                results.forEach((result, index) => {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+                    
+                    // 提取arXiv论文ID并创建链接
+                    let arxivId = '';
+                    let arxivUrl = '#';
+                    
+                    if (result.arxiv_id) {
+                        // 如果有arxiv_id字段，直接使用
+                        arxivId = result.arxiv_id;
+                        arxivUrl = `https://arxiv.org/abs/${arxivId}`;
+                    } else if (result.id) {
+                        // 从id字段提取
+                        const idMatch = result.id.match(/\/abs\/([0-9\.]+)/);
+                        if (idMatch && idMatch[1]) {
+                            arxivId = idMatch[1];
+                            arxivUrl = `https://arxiv.org/abs/${arxivId}`;
+                        }
+                    }
+                    
+                    resultItem.innerHTML = `
+                        <div class="similarity-score">相似度: ${result.similarity_score}</div>
+                        <div class="result-title">${index + 1}. <a href="${arxivUrl}" target="_blank" rel="noopener noreferrer">${result.title}</a></div>
+                        <div class="result-meta">
+                            <span>作者: ${result.authors}</span>
+                            <span>发布时间: ${result.published}</span>
+                            <span>分类: ${result.categories}</span>
+                        </div>
+                        <div class="result-summary">
+                            <strong>英文摘要:</strong> ${result.summary}
+                        </div>
+                        <div class="result-chinese-summary">
+                            <strong>中文摘要:</strong> ${result.chinese_summary}
+                        </div>
+                    `;
+                    
+                    resultsDiv.appendChild(resultItem);
+                });
+                
+                messages.appendChild(resultsDiv);
+                
+                // 滚动到底部
+                messages.scrollTop = messages.scrollHeight;
+            }
+            
+            // 初始化各组件
+            initSidebar();
+            initScrollButtons();
+            initCategorySelector();
+            initModelConfig();
+            initModelAutocomplete();
+            initApiKeyAutoFill();
+            initQuerySettings();
+            
+            // 表单提交事件
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                sendMessage();
+            });
+        });
+    </script>
+</body>
+</html>
